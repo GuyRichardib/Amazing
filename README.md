@@ -39,8 +39,8 @@ The source code can be found on this [link](https://github.com/GuyRichardib/Amaz
 
 
 # Web page overview
-* [LINK to the maze](https://github.com/GuyRichardib/Amazing/blob/main/image/preview.png 
+* [LINK to the maze]() 
 
                                                    (Computer)
                                 
-![image](https://github.com/GuyRichardib/Amazing/blob/main/preview.png)
+![image](hhttps://github.com/GuyRichardib/Amazing/blob/main/image/preview.png)
