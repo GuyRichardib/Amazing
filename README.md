@@ -39,7 +39,7 @@ The source code can be found on this [link](https://github.com/GuyRichardib/Amaz
 
 
 # Web page overview
-* [LINK](https://guyrichardib.github.io/Amazing/) 
+* [LINK to the maze](https://github.com/GuyRichardib/Amazing/blob/main/image/preview.png 
 
                                                    (Computer)
                                 
