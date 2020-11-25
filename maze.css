@@ -1,0 +1,100 @@
+body{
+    background-image: url('https://www.lefthudson.com/wp-content/uploads/2019/11/geometric-background-hd-new-10-wonderful-hd-geometric-wallpapers-this-week-of-geometric-background-hd.png');
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+p{
+    font-size: 30px;
+    font-weight: bold;
+    font-family: Arial, Helvetica, sans-serif;
+    color: rgb(115, 180, 58);
+    text-shadow: 3px 3px #2b5000;
+    text-align: center;
+}
+button{
+    display: flex;
+    margin: auto;
+    margin-bottom: 10px;
+    width:100px;
+    height: 25px;
+    justify-content: center;
+    font-weight: bold;
+    color: white;
+    border-radius: 10px;
+    box-shadow: 0px 1px 7px 0px;
+    background-color: rgba(69, 145, 34, 0.856);
+    cursor: pointer;
+}
+button:hover{
+    background-image: linear-gradient(120deg, rgba(123, 180, 48, 0.774), rgb(97, 138, 43));
+}
+div {
+    width: 42px;
+    height: 42px;
+    
+}
+
+section {
+    display: flex;
+ 
+}
+.container{
+    width: 624px;
+    height: 528px;
+    background-color: rgba(255, 255, 255, 0);
+    margin: auto;
+    border: 4.5px solid rgba(214, 252, 165, 0.815);
+    box-shadow: 0px 5px 7px 0px;
+}
+
+
+.wall {
+    background-image: url('mur.png');
+    background-color: grey;
+    border: 3px solid black;
+    display: flex;
+    justify-content: space-around;
+}
+
+.path {
+    background-color: rgba(123, 180, 48, 0.774);
+    border: 3px solid black;
+    display: flex;
+    justify-content: space-around;
+}
+
+.start {
+    background-color: green;
+    border: 3px solid black;
+    display: flex;
+    justify-content: space-around;
+}
+
+.treasure {
+    background-color: rgb(252, 195, 10);
+    background-image: url('Coin.png');
+    border: 3px solid black;
+    display: flex;
+    justify-content: space-around;
+}
+
+.player {
+    background-color: rgba(247, 18, 10, 0.774);
+    
+
+ 
+}
+.img1{
+    width: 42px;
+    height:42px;
+
+}
+.img2{
+    width: 42px;
+    height:42px;
+}
+.img3{
+    width: 42px;
+    height:42px;
+}
