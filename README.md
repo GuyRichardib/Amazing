@@ -43,4 +43,4 @@ The source code can be found on this [link](https://github.com/GuyRichardib/Amaz
 
                                                    (Computer)
                                 
-![image](hhttps://github.com/GuyRichardib/Amazing/blob/main/image/preview.png)
+![image](https://github.com/GuyRichardib/Amazing/blob/main/image/preview.png)
