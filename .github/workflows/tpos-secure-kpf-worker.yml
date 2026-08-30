@@ -1,0 +1,166 @@
+name: Temporary secure KPF worker
+
+on:
+  push:
+    branches:
+      - tpos-kpf-secure-worker-20260830
+    paths:
+      - '.github/workflows/tpos-secure-kpf-worker.yml'
+
+permissions:
+  contents: write
+
+env:
+  WORK_BRANCH: tpos-kpf-secure-worker-20260830
+  IMAGE: ghcr.io/yshalsager/calibre-with-kfx:20260809-0150
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout worker branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.WORK_BRANCH }}
+
+      - name: Generate ephemeral RSA key and publish only public key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tpos_secure" kpf_exchange
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out "$RUNNER_TEMP/tpos_secure/private.pem"
+          openssl pkey -in "$RUNNER_TEMP/tpos_secure/private.pem" -pubout -out kpf_exchange/public.pem
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add kpf_exchange/public.pem
+          git commit -m 'Publish ephemeral KPF worker public key' || true
+          git push origin "HEAD:${WORK_BRANCH}"
+
+      - name: Wait for encrypted manuscript payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/tpos_secure"
+          base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${WORK_BRANCH}/kpf_exchange"
+          ok=0
+          for i in $(seq 1 180); do
+            nonce="$(date +%s)-$RANDOM"
+            if curl -fsSL "$base/payload.enc.b64?x=$nonce" -o payload.enc.b64.tmp && \
+               curl -fsSL "$base/key.enc.b64?x=$nonce" -o key.enc.b64.tmp; then
+              mv payload.enc.b64.tmp payload.enc.b64
+              mv key.enc.b64.tmp key.enc.b64
+              ok=1
+              break
+            fi
+            rm -f payload.enc.b64.tmp key.enc.b64.tmp
+            sleep 5
+          done
+          test "$ok" = 1 || { echo 'Encrypted payload was not supplied in time'; exit 1; }
+          base64 -d payload.enc.b64 > payload.enc
+          base64 -d key.enc.b64 > key.enc
+
+      - name: Decrypt manuscript in runner memory/workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/tpos_secure"
+          openssl pkeyutl -decrypt \
+            -inkey private.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in key.enc -out keyinfo.txt
+          KEY=$(sed -n '1p' keyinfo.txt)
+          IV=$(sed -n '2p' keyinfo.txt)
+          test ${#KEY} -eq 64
+          test ${#IV} -eq 32
+          openssl enc -d -aes-256-cbc -K "$KEY" -iv "$IV" -in payload.enc -out The_Price_of_Sleep_FINAL.docx
+          rm -f keyinfo.txt payload.enc key.enc payload.enc.b64 key.enc.b64
+          test -s The_Price_of_Sleep_FINAL.docx
+          file The_Price_of_Sleep_FINAL.docx
+          sha256sum The_Price_of_Sleep_FINAL.docx | tee source_sha256.txt
+
+      - name: Create Kindle Previewer KPF
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/tpos_secure"
+          cat > "$work/convert_to_kpf.py" <<'PY'
+          from pathlib import Path
+          import sys
+          from calibre.utils.logging import Log
+          from calibre_plugins.kfx_output.kfxlib import YJ_Book, file_write_binary, set_logger
+          src=Path(sys.argv[-2]); dst=Path(sys.argv[-1])
+          log=Log(); set_logger(log)
+          result=YJ_Book(str(src), log).convert_to_kpf(flags={'QC'})
+          set_logger()
+          if not result.kpf_data:
+              print(result.error_msg or 'KPF conversion failed', file=sys.stderr)
+              if result.guidance: print('GUIDANCE:\n'+result.guidance, file=sys.stderr)
+              if result.logs: print('LOGS:\n'+result.logs, file=sys.stderr)
+              raise SystemExit(2)
+          file_write_binary(str(dst), result.kpf_data)
+          print('KPF bytes', len(result.kpf_data))
+          if result.guidance: print('GUIDANCE:\n'+result.guidance)
+          if result.logs: print('LOGS:\n'+result.logs)
+          PY
+          docker pull "$IMAGE"
+          docker run --rm \
+            -v "$work:/work:rw" \
+            --entrypoint bash "$IMAGE" -lc '
+              set -e
+              export XDG_RUNTIME_DIR=/tmp/xdg-runtime
+              mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+              Xvfb :99 -screen 0 1280x720x24 -nolisten tcp -ac >/tmp/xvfb.log 2>&1 &
+              XVFB_PID=$!
+              trap "kill $XVFB_PID 2>/dev/null || true" EXIT
+              sleep 2
+              export DISPLAY=:99
+              calibre-debug -e /work/convert_to_kpf.py -- /work/The_Price_of_Sleep_FINAL.docx /work/The_Price_of_Sleep_FINAL.kpf
+            ' 2>&1 | tee "$work/Kindle_Previewer_conversion.log"
+          test -s "$work/The_Price_of_Sleep_FINAL.kpf"
+
+      - name: Validate KPF package
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/tpos_secure"
+          python - "$work/The_Price_of_Sleep_FINAL.kpf" <<'PY'
+          import hashlib, json, sys, zipfile
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          with zipfile.ZipFile(p) as z:
+              names=z.namelist(); bad=z.testzip()
+          assert bad is None, bad
+          assert any(n.endswith('resources/book.kdf') or n=='resources/book.kdf' for n in names), names[:50]
+          manifest={
+              'title':'The Price of Sleep',
+              'author':'Éon D. Aletheia',
+              'kpf_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+              'kpf_size_bytes':p.stat().st_size,
+              'zip_crc':'PASS',
+              'contains_book_kdf':True,
+              'entries':names,
+              'generator':'Kindle Previewer 3.106.0 via KFX Output 2.19.0'
+          }
+          Path(str(p)+'.manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False),encoding='utf-8')
+          print(json.dumps(manifest,indent=2,ensure_ascii=False))
+          PY
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          cp "$RUNNER_TEMP/tpos_secure/The_Price_of_Sleep_FINAL.kpf" artifact/
+          cp "$RUNNER_TEMP/tpos_secure/The_Price_of_Sleep_FINAL.kpf.manifest.json" artifact/KPF_RELEASE_MANIFEST.json
+          cp "$RUNNER_TEMP/tpos_secure/Kindle_Previewer_conversion.log" artifact/
+          cp "$RUNNER_TEMP/tpos_secure/source_sha256.txt" artifact/
+
+      - name: Upload KPF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: the-price-of-sleep-kpf-secure
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 3
