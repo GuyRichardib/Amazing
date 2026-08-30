@@ -37,7 +37,7 @@ jobs:
           git commit -m 'Publish ephemeral KPF worker public key' || true
           git push origin "HEAD:${WORK_BRANCH}"
 
-      - name: Wait for encrypted manuscript payload
+      - name: Wait for encrypted manuscript chunks
         shell: bash
         run: |
           set -euo pipefail
@@ -46,21 +46,37 @@ jobs:
           ok=0
           for i in $(seq 1 180); do
             nonce="$(date +%s)-$RANDOM"
-            if curl -fsSL "$base/payload.enc.b64?x=$nonce" -o payload.enc.b64.tmp && \
+            if curl -fsSL "$base/manifest.txt?x=$nonce" -o manifest.txt.tmp && \
                curl -fsSL "$base/key.enc.b64?x=$nonce" -o key.enc.b64.tmp; then
-              mv payload.enc.b64.tmp payload.enc.b64
-              mv key.enc.b64.tmp key.enc.b64
-              ok=1
-              break
+              count=$(tr -d '\r\n ' < manifest.txt.tmp)
+              if [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -gt 0 ]; then
+                chunks_ok=1
+                rm -f payload.enc.b64.tmp
+                : > payload.enc.b64.tmp
+                for n in $(seq -w 0 $((count-1))); do
+                  if ! curl -fsSL "$base/payload_${n}.part?x=$nonce" -o "chunk_${n}.tmp"; then
+                    chunks_ok=0
+                    break
+                  fi
+                  cat "chunk_${n}.tmp" >> payload.enc.b64.tmp
+                done
+                if [ "$chunks_ok" = 1 ]; then
+                  mv manifest.txt.tmp manifest.txt
+                  mv key.enc.b64.tmp key.enc.b64
+                  mv payload.enc.b64.tmp payload.enc.b64
+                  ok=1
+                  break
+                fi
+              fi
             fi
-            rm -f payload.enc.b64.tmp key.enc.b64.tmp
+            rm -f manifest.txt.tmp key.enc.b64.tmp payload.enc.b64.tmp chunk_*.tmp
             sleep 5
           done
-          test "$ok" = 1 || { echo 'Encrypted payload was not supplied in time'; exit 1; }
+          test "$ok" = 1 || { echo 'Encrypted payload chunks were not supplied in time'; exit 1; }
           base64 -d payload.enc.b64 > payload.enc
           base64 -d key.enc.b64 > key.enc
 
-      - name: Decrypt manuscript in runner memory/workspace
+      - name: Decrypt manuscript in runner workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -75,7 +91,7 @@ jobs:
           test ${#KEY} -eq 64
           test ${#IV} -eq 32
           openssl enc -d -aes-256-cbc -K "$KEY" -iv "$IV" -in payload.enc -out The_Price_of_Sleep_FINAL.docx
-          rm -f keyinfo.txt payload.enc key.enc payload.enc.b64 key.enc.b64
+          rm -f keyinfo.txt payload.enc key.enc payload.enc.b64 key.enc.b64 chunk_*.tmp
           test -s The_Price_of_Sleep_FINAL.docx
           file The_Price_of_Sleep_FINAL.docx
           sha256sum The_Price_of_Sleep_FINAL.docx | tee source_sha256.txt
