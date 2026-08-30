@@ -76,7 +76,7 @@ jobs:
           base64 -d payload.enc.b64 > payload.enc
           base64 -d key.enc.b64 > key.enc
 
-      - name: Decrypt manuscript in runner workspace
+      - name: Decrypt validated EPUB in runner workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -90,11 +90,11 @@ jobs:
           IV=$(sed -n '2p' keyinfo.txt)
           test ${#KEY} -eq 64
           test ${#IV} -eq 32
-          openssl enc -d -aes-256-cbc -K "$KEY" -iv "$IV" -in payload.enc -out The_Price_of_Sleep_FINAL.docx
+          openssl enc -d -aes-256-cbc -K "$KEY" -iv "$IV" -in payload.enc -out The_Price_of_Sleep_FINAL.epub
           rm -f keyinfo.txt payload.enc key.enc payload.enc.b64 key.enc.b64 chunk_*.tmp
-          test -s The_Price_of_Sleep_FINAL.docx
-          file The_Price_of_Sleep_FINAL.docx
-          sha256sum The_Price_of_Sleep_FINAL.docx | tee source_sha256.txt
+          test -s The_Price_of_Sleep_FINAL.epub
+          unzip -t The_Price_of_Sleep_FINAL.epub
+          sha256sum The_Price_of_Sleep_FINAL.epub | tee source_sha256.txt
 
       - name: Create Kindle Previewer KPF
         shell: bash
@@ -132,7 +132,7 @@ jobs:
               trap "kill $XVFB_PID 2>/dev/null || true" EXIT
               sleep 2
               export DISPLAY=:99
-              calibre-debug -e /work/convert_to_kpf.py -- /work/The_Price_of_Sleep_FINAL.docx /work/The_Price_of_Sleep_FINAL.kpf
+              calibre-debug -e /work/convert_to_kpf.py -- /work/The_Price_of_Sleep_FINAL.epub /work/The_Price_of_Sleep_FINAL.kpf
             ' 2>&1 | tee "$work/Kindle_Previewer_conversion.log"
           test -s "$work/The_Price_of_Sleep_FINAL.kpf"
 
@@ -152,6 +152,8 @@ jobs:
           manifest={
               'title':'The Price of Sleep',
               'author':'Éon D. Aletheia',
+              'source':'validated reflowable EPUB generated from the final centered-title DOCX',
+              'chapters':36,
               'kpf_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
               'kpf_size_bytes':p.stat().st_size,
               'zip_crc':'PASS',
